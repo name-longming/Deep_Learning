@@ -77,32 +77,40 @@ def load_data(mode='train'):
 
 # 多层卷积神经网络实现
 class MNIST(paddle.nn.Layer):
-    def __init__(self):
+    def __init__(self, num_classes = 1):
         super(MNIST, self).__init__()
-
-        # 定义卷积层，输出特征通道out_channels设置为20，卷积核的大小kernel_size为5，卷积步长stride=1，padding=2
-        self.conv1 = Conv2D(in_channels=1, out_channels=20, kernel_size=5, stride=1, padding=2)
-        # 定义池化层，池化核的大小kernel_size为2，池化步长为2
+        # 创建卷积和池化层
+        # 创建第1个卷积层
+        self.conv1 = Conv2D(in_channels=1, out_channels=6, kernel_size=5)
         self.max_pool1 = MaxPool2D(kernel_size=2, stride=2)
-        # 定义卷积层，输出特征通道out_channels设置为20，卷积核的大小kernel_size为5，卷积步长stride=1，padding=2
-        self.conv2 = Conv2D(in_channels=20, out_channels=20, kernel_size=5, stride=1, padding=2)
-        # 定义池化层，池化核的大小kernel_size为2，池化步长为2
+        # 尺寸的逻辑：池化层未改变通道数；当前通道数为6
+        # 创建第2个卷积层
+        self.conv2 = Conv2D(in_channels=6, out_channels=16, kernel_size=5)
         self.max_pool2 = MaxPool2D(kernel_size=2, stride=2)
-        # 定义一层全连接层，输出维度是1
-        self.fc = Linear(in_features=980, out_features=10)
+        # 创建第3个卷积层
+        self.conv3 = Conv2D(in_channels=16, out_channels=120, kernel_size=4)
+        # 尺寸的逻辑：输入层将数据拉平[B,C,H,W] -> [B,C*H*W]
+        # 输入size是[28,28]，经过三次卷积和两次池化之后，C*H*W等于120
+        self.fc1 = Linear(in_features=120, out_features=64)
+        # 创建全连接层，第一个全连接层的输出神经元个数为64， 第二个全连接层输出神经元个数为分类标签的类别数
+        self.fc2 = Linear(in_features=64, out_features=num_classes)
 
     # 定义网络前向计算过程，卷积后紧接着使用池化层，最后使用全连接层计算最终输出
     # 卷积层激活函数使用Relu，全连接层不使用激活函数
     def forward(self, inputs):
         x = self.conv1(inputs)
-        x = F.relu(x)
+        # 每个卷积层使用Sigmoid激活函数，后面跟着一个2x2的池化
+        x = F.sigmoid(x)
         x = self.max_pool1(x)
+        x = F.sigmoid(x)
         x = self.conv2(x)
-        x = F.relu(x)
         x = self.max_pool2(x)
-        x = paddle.reshape(x, [x.shape[0], 980])
-        x = self.fc(x)
-        x = F.softmax(x)
+        x = self.conv3(x)
+        # 尺寸的逻辑：输入层将数据拉平[B,C,H,W] -> [B,C*H*W]
+        x = paddle.reshape(x, [x.shape[0], -1])
+        x = self.fc1(x)
+        x = F.sigmoid(x)
+        x = self.fc2(x)
         return x
 
 
@@ -150,7 +158,7 @@ def train(model):
 
 
 # 创建模型
-model = MNIST()
+model = MNIST(num_classes=10)
 # 启动训练过程
 train(model)
 
@@ -165,7 +173,7 @@ def load_image(img_path):
     return im
 
 # 定义预测过程
-model = MNIST()
+model = MNIST(num_classes=10)
 params_file_path = 'mnist.pdparams'
 img_path = 'work/example_0.png'
 # 加载模型参数
